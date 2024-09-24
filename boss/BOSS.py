@@ -27,6 +27,9 @@ def main(arg_list: list = None):
         if args.ref:
             exp = br_core.BossRuns(args=args)
             func = exp.process_batch_runs
+        elif args.trio:
+            exp = br_core.BossTrio(args=args)
+            func = exp.process_batch_trio
         else:
             exp = ba_core.BossAeons(args=args)
             func = exp.process_batch_aeons
@@ -49,6 +52,9 @@ def main(arg_list: list = None):
         if args.ref:
             exp = br_sim.BossRunsSim(args=args)
             func = exp.process_batch_runs_sim
+        elif args.trio:
+            exp = br_core.BossTrioSim(args=args)
+            func = exp.process_batch_trio_sim
         else:
             exp = ba_sim.BossAeonsSim(args=args)
             func = exp.process_batch_aeons_sim
