@@ -142,11 +142,11 @@ class ReadCache:
         :return:
         """
         # Control: total number of bases + alpha for each read
-        self.time_control += total_bases
+        self.time_control += total_bases / 2.5  # previousy treated as 1 base taking 1 ms, but common estimates say 400b/s
         self.time_control += (self.batchsize * self.alpha)
         # BR: all accepted bases and ((mu + rho) * number of unmapped/rejected reads) + (alpha * batch_size)
         bases_br = np.sum([r[0].qlen for r in paf_dict.values()])
-        self.time_boss += bases_br
+        self.time_boss += bases_br / 2.5
         self.time_boss += (n_unmapped * (self.mu + self.rho))
         self.time_boss += (n_reject * (self.mu + self.rho))
         self.time_boss += (self.batchsize * self.alpha)
