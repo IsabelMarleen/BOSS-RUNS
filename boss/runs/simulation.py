@@ -39,8 +39,7 @@ class BossRunsSim(BossRuns):
         seqs: dict[str, str],
         paf_full: str,
         paf_trunc: str,
-        barcodes: dict[str, int],
-        window: int = 100
+        barcodes: dict[str, int]
     ) -> tuple[paf_dict_type, dict[str, str], int, int, int, int]:
         """
         Make decisions about sampled data and build the paf_dict
@@ -49,7 +48,6 @@ class BossRunsSim(BossRuns):
         :param paf_full: Raw output of mapping full-length reads
         :param paf_trunc: Raw output of mapping truncated reads
         :param barcodes: Dict of barcodes of raw sequences
-        :param window: downsampling size
         :return: paf_dict, and numbers of unmapped and rejected reads
         """
         # build a paf dict and either accept or reject reads
@@ -77,7 +75,7 @@ class BossRunsSim(BossRuns):
             # actual decision look-up
             try:
                 strat = self.contigs_filt[str(rec.tname)].strat
-                decision = strat[start_pos // window, rec.rev, barcodes[rec.qname]]
+                decision = strat[start_pos // self.args.optional.window_size, rec.rev, barcodes[rec.qname]]
 
             except (KeyError, IndexError):
                 # in case the read maps to a chromosome that we don't have a strategy for

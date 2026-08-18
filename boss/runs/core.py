@@ -32,7 +32,7 @@ class BossRuns(Boss):
         self.nbarcodes = len(self.barcodes_index)
         # initialise reference
         assert self.args.general.ref is not None
-        self.ref = Reference(ref=self.args.general.ref, mmi=self.args.general.mmi, reject_refs=self.args.optional.reject_refs, barcodes=self.args.general.barcodes)
+        self.ref = Reference(ref=self.args.general.ref, mmi=self.args.general.mmi, reject_refs=self.args.optional.reject_refs, barcodes=self.args.general.barcodes, window_size=self.args.optional.window_size)
         self.contigs = self.ref.contigs
         self.contigs_filt = {n: c for n, c in self.contigs.items() if not c.rej}  # NOTE: This could potentially be different for different barcodes, consider and implement if applicable
         # initialise a mapper using the reference
@@ -172,7 +172,7 @@ class BossRuns(Boss):
             self._update_benefits()
             # merge the benefits into one array for combined calculation
             benefit, _smu = self.scoring.merge_benefit(self.contigs_filt)
-            target_size = self.ref.n_sites // 100
+            target_size = self.ref.n_sites // self.args.optional.window_size
             benefit_adj = adjust_length(original_size=target_size,
                                         expanded=benefit)
             smu_adj = adjust_length(original_size=target_size,
@@ -185,7 +185,8 @@ class BossRuns(Boss):
                 benefit=benefit_adj,
                 smu=smu_adj,
                 fhat=fhat_adj,
-                time_cost=self.rl_dist.time_cost
+                time_cost=self.rl_dist.time_cost,
+                window = self.args.optional.window_size
             )
             # distribute the strategy to the contigs
             self._distribute_strategy(strat=strat)

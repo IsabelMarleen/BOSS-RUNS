@@ -17,7 +17,7 @@ from boss.runs.sequences import Scoring
 
 class Contig:
 
-    def __init__(self, name: str, seq: str, ploidy: int = 1, rej: bool = False, barcodes: list | None = None):
+    def __init__(self, name: str, seq: str, ploidy: int = 1, rej: bool = False, barcodes: list | None = None, window_size: int = 100):
         """
         Initialise a contig object
 
@@ -26,6 +26,7 @@ class Contig:
         :param ploidy: Contig from haploid or diploid organism
         :param rej: Always reject from this contig?
         :param barcodes: List of strings of barcode names
+        :param window_size: downsampling size
         """
         self.name = name.strip().split(" ")[0]
         self.seq = seq.upper()
@@ -33,10 +34,11 @@ class Contig:
         self.rej = rej   # flag whether to reject all reads from this contig # NOTE: Will depend on whether this is the same for every barcodes, Lukas believes this is not needed for initial implementation
         self.barcodes = barcodes
         self.nbarcodes = len(barcodes) if barcodes is not None else 1
+        self.window_size = window_size
         self.seq_int = self._seq2int()
         self._init_coverage()
         self._init_buckets()
-        self.scoring = Scoring(ploidy=ploidy)
+        self.scoring = Scoring(ploidy=ploidy, window_size=window_size)
         self.len_b = self.scoring.priors.len_b
         self.score0, self.ent0 = self.scoring.score0, self.scoring.ent0
         self._init_scores()
@@ -106,16 +108,15 @@ class Contig:
 
 
 
-    def _init_strat(self, window: int = 100) -> None:
+    def _init_strat(self) -> None:
         """
         Initialise dummy strategies for the contig
-        :param window: Downsampling window size
         :return:
         """
         if self.rej:
             self.strat = np.zeros(dtype="bool", shape=1)  # NOTE: If 'reject by default' can be barcode specific, add another dimension here
         else:
-            self.strat = np.ones(dtype="bool", shape=(self.length // window, 2, self.nbarcodes))
+            self.strat = np.ones(dtype="bool", shape=(self.length // self.window_size, 2, self.nbarcodes))
 
 
 
@@ -212,44 +213,42 @@ class Contig:
 
 
 
-    def calc_smu(self, window: int = 100, mu: int = 400) -> None:
+    def calc_smu(self, mu: int = 400) -> None:
         """
         Calculate S_mu, i.e. scores of mu-sized fragment at each position
 
-        :param window: Size of downsampling window
         :param mu: Length of mu in model
         :return:
         """
         # NOTE: Can in the future vectorise this function fully
         # assign smu as attribute
-        self.smu = np.zeros(shape=(int(self.length // window) + 1, 2, self.nbarcodes))
+        self.smu = np.zeros(shape=(int(self.length // self.window_size) + 1, 2, self.nbarcodes))
         # downsample the scores
-        self.scores_ds = np.zeros(shape=(int(self.length // window) + 1, self.nbarcodes))
+        self.scores_ds = np.zeros(shape=(int(self.length // self.window_size) + 1, self.nbarcodes))
         for b in range(0, self.nbarcodes):
-            site_indices = np.arange(0, self.length) // window
+            site_indices = np.arange(0, self.length) // self.window_size
             # avoid buffering
             np.add.at(self.scores_ds[:,b], site_indices, self.scores[:,b])
             # calculate smu - fwd needs double reversal due to how bn.move_sum() operates
-            smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=mu // window, min_count=1)[::-1]
-            smu_rev = bn.move_sum(self.scores_ds[:,b], window=mu // window, min_count=1)
+            smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=mu // self.window_size, min_count=1)[::-1]
+            smu_rev = bn.move_sum(self.scores_ds[:,b], window=mu // self.window_size, min_count=1)
 
             self.smu[:, 0, b] = smu_fwd
             self.smu[:, 1, b] = smu_rev
 
 
 
-    def calc_u(self, approx_ccl: NDArray, window: int = 100) -> None:
+    def calc_u(self, approx_ccl: NDArray) -> None:
         """
         Calculate the expected benefit of new fragments at each position
         New implementation using bn.move_sum
 
         :param approx_ccl: Approximation of read length distribution
-        :param window: Downsampling window size
         :return:
         """
         # TODO: Find out how this function works and the how it needs to change
         # downsample read length dist
-        approx_ccl_ds = approx_ccl // window
+        approx_ccl_ds = approx_ccl // self.window_size
         mult = np.arange(0.05, 1, 0.1)[::-1]
         self.expected_benefit = np.zeros((self.scores_ds.shape[0], 2, self.nbarcodes))
         for b in range(0, self.nbarcodes):
@@ -273,7 +272,7 @@ class Contig:
 
 class Reference:
 
-    def __init__(self, ref: str, mmi: str | None = None, reject_refs: str | None = None, barcodes: list | None = None):
+    def __init__(self, ref: str, mmi: str | None = None, reject_refs: str | None = None, barcodes: list | None = None, window_size: int = 100):
         """
         Initialise a reference object. Loads contigs, load or create index
         and set contigs from which to always reject
@@ -282,10 +281,12 @@ class Reference:
         :param mmi: Optional path to minimap index file
         :param reject_refs: Optional comma-sep list of headers in fasta
         :param barcodes: Optional list of barcode names used in the experiment
+        :param window_size: downsampling size
         """
         self.ref = ref
         self.mmi = mmi
         self.barcodes = barcodes
+        self.window_size = window_size
         if not Path(ref).is_file():
             raise FileNotFoundError("Reference file not found")
         ref_suff = Path(ref).suffixes
@@ -331,10 +332,10 @@ class Reference:
                 continue
             # load reference sequences
             if cname not in self.reject_refs: # NOTE: If barcodes can have different always reject refs, self.reject_refs should be indexable by barcode
-                contigs[cname] = Contig(name=cname, seq=cseq, ploidy=ploidy, barcodes=self.barcodes)
+                contigs[cname] = Contig(name=cname, seq=cseq, ploidy=ploidy, barcodes=self.barcodes, window_size=self.window_size)
             # for ref seqs that we always reject, set sequence empty
             else:
-                contigs[cname] = Contig(name=cname, seq="ACGT", ploidy=ploidy, rej=True) # NOTE: Add barcodes as parameter, if barcodes can have different always reject refs
+                contigs[cname] = Contig(name=cname, seq="ACGT", ploidy=ploidy, rej=True, window_size=self.window_size) # NOTE: Add barcodes as parameter, if barcodes can have different always reject refs
         return contigs
 
 

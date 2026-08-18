@@ -14,11 +14,12 @@ from boss.paf import Paf, paf_dict_type
 
 class Priors:
 
-    def __init__(self, ploidy: int = 1):
+    def __init__(self, ploidy: int = 1, window_size: int = 100):
         """
         Initialise a prior container
 
         :param ploidy: Only haploid and diploid implemented at the moment
+        :param window_size: Downsampling size
         """
         # set ploidy to either haploid or diploid
         if int(ploidy) == 1:
@@ -27,6 +28,7 @@ class Priors:
             self.diploid = True
         else:
             raise ValueError("Given ploidy is not defined")
+        self.window_size = window_size
         # initialise phi and priors
         self.len_b, self.len_g, self.phi = self._generate_phi(diploid=self.diploid)
         self._init_phi_stored()
@@ -332,12 +334,14 @@ class Priors:
 
 class Scoring:
 
-    def __init__(self, ploidy: int = 1):
+    def __init__(self, ploidy: int = 1, window_size: int = 100):
         """
         Initialise a scoring container
         :param ploidy: Ploidy of organism in experiment
+        :param window_size: downsampling size
         """
-        self.priors = Priors(ploidy=ploidy)
+        self.window_size = window_size
+        self.priors = Priors(ploidy=ploidy, window_size=window_size)
         self.n_ref = 4  # n of distinct reference nuc
         self.score0, self.ent0 = self.calc_score(scores=np.zeros(1), pos_posterior=self.priors.prior_dist[0:1])
 
@@ -563,7 +567,7 @@ class Scoring:
 
 
     @staticmethod
-    def find_strat_thread(benefit: NDArray, smu: NDArray, fhat: NDArray, time_cost: int) -> tuple[NDArray, float]:
+    def find_strat_thread(benefit: NDArray, smu: NDArray, fhat: NDArray, time_cost: int, window: int = 100) -> tuple[NDArray, float]:
         """
         Finding approximate decision strategy from the current read benefits
 
@@ -571,10 +575,10 @@ class Scoring:
         :param smu: S_mu at each position
         :param fhat: Read starting probability at each position
         :param time_cost: Additional time cost of sequencing
+        :param window: downsampling size
         :return: Tuple of strategy and threshold of acceptance
         """
         # take downsampling into consideration
-        window = 100
         alpha = 300 // window
         rho = 300 // window
         mu = 400 // window
