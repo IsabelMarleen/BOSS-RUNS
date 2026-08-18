@@ -7,14 +7,11 @@ from numpy.typing import NDArray
 
 from boss.core import Boss
 from boss.mapper import Mapper
-from boss.utils import adjust_length
-
-from boss.runs.sequences import CoverageConverter, Scoring
-from boss.runs.reference import Reference
 from boss.runs.abundance_tracker import AbundanceTracker
 from boss.runs.readstartdist import ReadStartDist
-
-
+from boss.runs.reference import Reference
+from boss.runs.sequences import CoverageConverter, Scoring
+from boss.utils import adjust_length
 
 
 class BossRuns(Boss):
@@ -92,7 +89,7 @@ class BossRuns(Boss):
         Update the scores for each contig
         :return:
         """
-        for cname, cont in self.contigs_filt.items():
+        for cont in self.contigs_filt.values():
             # main score updating function
             cont.scores, cont.entropy = self.scoring.update_scores(contig=cont)
             # modify scores after updating
@@ -104,7 +101,7 @@ class BossRuns(Boss):
         Check if the buckets within the contigs have enough coverage to be switched on
         :return: Boolean if any strategy has been switched on
         """
-        for cname, cont in self.contigs_filt.items():
+        for cont in self.contigs_filt.values():
             cont.check_buckets(threshold=self.args.optional.bucket_threshold)
         # check if any switches are on
         switched_on = [any(c.switched_on) for c in self.contigs.values()]
@@ -116,29 +113,28 @@ class BossRuns(Boss):
         Update the expected benefit for all contigs
         :return:
         """
-        for cname, cont in self.contigs_filt.items():
+        for cont in self.contigs_filt.values():
             cont.calc_smu()
             cont.calc_u(approx_ccl=self.rl_dist.approx_ccl)
 
 
 
-    def _distribute_strategy(self, strat: NDArray, window: int = 100) -> None:
+    def _distribute_strategy(self, strat: NDArray) -> None:
         """
         Place new decision strategies into the contigs strategies
 
         :param strat: Merged array of the updated strategy
-        :param window: Downsampling window size
         :return:
         """
         i = 0
         for cname, cont in self.contigs_filt.items():
             # get the buckets of this contig and expand
-            expand_fac = cont.bucket_size // window
+            expand_fac = cont.bucket_size // self.args.window_size
             buckets_exp = np.repeat(cont.bucket_switches, expand_fac, axis=0)
             buckets = adjust_length(original_size=cont.strat.shape[0], expanded=buckets_exp)
             assert buckets.shape[0] == cont.strat.shape[0]
             # grab the new strategy
-            cstrat = strat[i: i + cont.length // window, :]
+            cstrat = strat[i: i + cont.length // self.args.window_size, :]
             assert cstrat.shape == cont.strat.shape
             # assign new strat
             if not self.args.general.barcodes:
@@ -152,7 +148,7 @@ class BossRuns(Boss):
             f_perc = np.count_nonzero(cont.strat[:, 0]) / cont.strat.shape[0]
             r_perc = np.count_nonzero(cont.strat[:, 1]) / cont.strat.shape[0]
             logging.info(f'{cname}: {f_perc}, {r_perc}') # NOTE: Maybe think about whether this log is confusing because it can report more sites than exist with barcodes
-            i += cont.length // window
+            i += cont.length // self.args.window_size
 
 
 
@@ -175,7 +171,7 @@ class BossRuns(Boss):
             fhat_exp = np.repeat(fhat_exp[:, :, np.newaxis], self.nbarcodes, axis=2)
             self._update_benefits()
             # merge the benefits into one array for combined calculation
-            benefit, smu = self.scoring.merge_benefit(self.contigs_filt)
+            benefit, _smu = self.scoring.merge_benefit(self.contigs_filt)
             target_size = self.ref.n_sites // 100
             benefit_adj = adjust_length(original_size=target_size,
                                         expanded=benefit)
@@ -185,7 +181,7 @@ class BossRuns(Boss):
                                      expanded=fhat_exp)
             assert fhat_adj.shape == benefit_adj.shape == smu_adj.shape
             # find the current decision strategy
-            strat, threshold = self.scoring.find_strat_thread(
+            strat, _threshold = self.scoring.find_strat_thread(
                 benefit=benefit_adj,
                 smu=smu_adj,
                 fhat=fhat_adj,

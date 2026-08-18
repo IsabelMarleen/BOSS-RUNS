@@ -1,13 +1,12 @@
 import argparse
-from pathlib import Path
-from datetime import datetime
 import sys
-import tomllib
+from datetime import datetime
+from pathlib import Path
 
-from pydantic import BaseModel, ValidationError, Field
+import tomllib
+from pydantic import BaseModel, Field, ValidationError
 
 from boss.utils import init_logger
-
 
 """
 Configuration:
@@ -49,6 +48,7 @@ class OptionalConfig(BaseModel):
     tetra: bool = Field(default=True, description="[debug] Switch tetranucleotide frequency tests")
     filter_repeats: bool = Field(default=False, description="[debug] Switch repeat filtering")
     bucket_threshold: int = Field(default=5, description="[debug] At which coverage to switch on the strategy in a bucket")
+    window_size: int = Field(default=100, description="Number of bases in each downsampling window of strategy calculation")
 
 
 class SimulationConfig(BaseModel):
@@ -101,7 +101,7 @@ class Config:
         if self.args.general.toml_readfish:
             args_readfish = tomllib.loads(Path(self.args.general.toml_readfish).read_text(encoding="utf-8"))
         else:
-            args_readfish = dict()
+            args_readfish = {}
 
         # initialise a log file in the output folder
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
