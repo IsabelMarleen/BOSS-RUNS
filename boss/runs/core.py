@@ -129,12 +129,12 @@ class BossRuns(Boss):
         i = 0
         for cname, cont in self.contigs_filt.items():
             # get the buckets of this contig and expand
-            expand_fac = cont.bucket_size // self.args.window_size
+            expand_fac = cont.bucket_size // self.args.optional.window_size
             buckets_exp = np.repeat(cont.bucket_switches, expand_fac, axis=0)
             buckets = adjust_length(original_size=cont.strat.shape[0], expanded=buckets_exp)
             assert buckets.shape[0] == cont.strat.shape[0]
             # grab the new strategy
-            cstrat = strat[i: i + cont.length // self.args.window_size, :]
+            cstrat = strat[i: i + cont.length // self.args.optional.window_size, :]
             assert cstrat.shape == cont.strat.shape
             # assign new strat
             if not self.args.general.barcodes:
@@ -148,7 +148,7 @@ class BossRuns(Boss):
             f_perc = np.count_nonzero(cont.strat[:, 0]) / cont.strat.shape[0]
             r_perc = np.count_nonzero(cont.strat[:, 1]) / cont.strat.shape[0]
             logging.info(f'{cname}: {f_perc}, {r_perc}') # NOTE: Maybe think about whether this log is confusing because it can report more sites than exist with barcodes
-            i += cont.length // self.args.window_size
+            i += cont.length // self.args.optional.window_size
 
 
 
