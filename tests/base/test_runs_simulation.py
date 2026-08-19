@@ -1,19 +1,18 @@
-import subprocess
-import pytest
-from pathlib import Path
 import logging
+import subprocess
 import time
-import numpy as np
+from pathlib import Path
 
-import boss.runs.simulation
 import boss.config
+import boss.runs.simulation
+import numpy as np
+import pytest
 
 from ..constants import PATHS
 
+barcode_list = [[None, 100], [None, 1000], [["barcode01", "barcode02"], 100], [["barcode01", "barcode02"], 1000]]
 
-barcode_list = [None, ["barcode01", "barcode02"]]
-
-@pytest.fixture(params=barcode_list)
+@pytest.fixture(params=barcode_list, ids=["not barcoded, small window", "not barcoded, large window", "barcoded, small window", "barcoded, large window"])
 def args(request):
     conf = boss.config.Config()
     args = conf.args
@@ -25,7 +24,8 @@ def args(request):
     args.simulation.maxb = 8
     args.simulation.batchsize = 100
     args.simulation.dumptime = 10000
-    args.general.barcodes = request.param
+    args.general.barcodes = request.param[0]
+    args.optional.window_size = request.param[1]
     return args
 
 

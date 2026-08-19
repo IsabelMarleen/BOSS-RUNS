@@ -230,8 +230,12 @@ class Contig:
             # avoid buffering
             np.add.at(self.scores_ds[:,b], site_indices, self.scores[:,b])
             # calculate smu - fwd needs double reversal due to how bn.move_sum() operates
-            smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=mu // self.window_size, min_count=1)[::-1]
-            smu_rev = bn.move_sum(self.scores_ds[:,b], window=mu // self.window_size, min_count=1)
+            if mu // self.window_size == 0:
+                w = 1
+            else:
+                w = mu // self.window_size
+            smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=w, min_count=1)[::-1]
+            smu_rev = bn.move_sum(self.scores_ds[:,b], window=w, min_count=1)
 
             self.smu[:, 0, b] = smu_fwd
             self.smu[:, 1, b] = smu_rev
