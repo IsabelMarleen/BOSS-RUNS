@@ -1,9 +1,9 @@
-import pytest
-import time
 import logging
+import time
+
+import pytest
 
 import boss.core
-
 
 
 @pytest.fixture

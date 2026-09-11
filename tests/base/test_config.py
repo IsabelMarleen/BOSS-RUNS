@@ -4,8 +4,7 @@ import pytest
 
 import boss.config
 
-from ..constants import DATA_BASE, CONF_BASE
-
+from ..constants import CONF_BASE, DATA_BASE
 
 
 def test_defaults():
