@@ -1,5 +1,5 @@
-import pytest
 import numpy as np
+import pytest
 
 import boss.runs.sequences as brs
 
@@ -89,7 +89,7 @@ def test_convert_records(zymo_read_batch, paf_dict, zymo_ref):
     nonref_fraction = []
     for refname, adds in incr.items():
         for i in range(len(adds)):
-            start, end, seq, qual, _ = adds[i]
+            start, end, seq, _qual, _ = adds[i]
             # grab the reference sequence
             refarr = zymo_ref.contigs[refname].seq_int[start: end]
             # check where the mapping differs
@@ -123,6 +123,58 @@ def test_score_array(scoring):
     assert np.isclose(scoring.entropy_arr[28, 0, 0, 0, 0, 3], 3.834200141940696e-44)
     assert np.isclose(scoring.score_arr[2, 0, 0, 0, 0, 3], 0.17253973305650225)
     assert np.isclose(scoring.entropy_arr[2, 0, 0, 0, 0, 3], 0.22957118271635163)
+
+@pytest.fixture
+def posteriors():
+    expected_pos = np.array([[[8.06983293e-01, 2.72813825e-03, 8.03958698e-09, 1.90287643e-01,
+         9.18097027e-07],
+        [8.09191562e-01, 1.15578307e-10, 8.06158690e-09, 1.90808355e-01,
+         7.44852526e-08],
+        [8.09191597e-01, 1.15578312e-10, 1.15578312e-10, 1.90808363e-01,
+         3.97254697e-08]],
+       [[2.72813825e-03, 8.06983293e-01, 8.03958698e-09, 1.90287643e-01,
+         9.18097027e-07],
+        [1.41342671e-02, 1.76642261e-07, 4.16524602e-08, 9.85865130e-01,
+         3.84849045e-07],
+        [1.41342702e-02, 1.76642300e-07, 5.97168020e-10, 9.85865347e-01,
+         2.05252869e-07]],
+
+       [[1.39370475e-02, 1.39370475e-02, 1.21488820e-05, 9.72109066e-01,
+         4.69021756e-06],
+        [1.41340960e-02, 5.97160661e-10, 1.23206486e-05, 9.85853198e-01,
+         3.84844387e-07],
+        [1.41342702e-02, 5.97168020e-10, 1.76642300e-07, 9.85865347e-01,
+         2.05252869e-07]],
+
+       [[4.84635825e-05, 4.84635825e-05, 1.42817977e-10, 9.99903056e-01,
+         1.63093901e-08],
+        [4.84659320e-05, 2.04766884e-12, 1.42824901e-10, 9.99951533e-01,
+         1.31963458e-09],
+        [4.84659321e-05, 2.04766884e-12, 2.04766884e-12, 9.99951533e-01,
+         7.03805110e-10]]])
+    return expected_pos
+
+def test_calc_posteriors(scoring, posteriors):
+    pos = scoring.calc_posterior(np.array([[4, 4, 1, 5, 0],[4, 0, 1, 5, 0],[4, 0, 0, 5, 0]])) # 4 bases, N
+    
+    assert pos.shape == posteriors.shape == (4,3,5)
+    np.testing.assert_allclose(pos, posteriors)
+
+
+def test_calc_scores(scoring, posteriors):
+    # Calculate 3 new scores
+    n = 3
+    score0 = 0.04969294
+    init_scores = np.repeat(score0, repeats=n, axis=0)
+    scores, entropy = scoring.calc_score(init_scores, posteriors[0,:,:])
+
+    exp_scores = np.array([0.41063798, 0.40142846, 0.40142834])
+    exp_entropy = np.array([0.50490841, 0.48739441, 0.48739369])
+
+    assert scores.shape == exp_scores.shape == (3,)
+    assert entropy.shape == exp_entropy.shape == (3,)
+    np.testing.assert_allclose(scores, exp_scores)
+    np.testing.assert_allclose(entropy, exp_entropy)
 
 
 
