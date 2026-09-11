@@ -1,15 +1,14 @@
 import re
 from collections import defaultdict
-from itertools import permutations, product
 from concurrent.futures import ThreadPoolExecutor as TPexe
+from itertools import permutations, product
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
-from boss.utils import reverse_complement, binc
 from boss.paf import Paf, paf_dict_type
-
+from boss.utils import binc, reverse_complement
 
 
 class Priors:
@@ -379,7 +378,7 @@ class Scoring:
         # all permutations per element
         cov_patterns = set()
         for i in range(len(p)):
-            q = set(list(permutations(p[i])))
+            q = set(permutations(p[i]))
             cov_patterns |= q
 
         # transform generated coverage patterns to array
@@ -490,7 +489,7 @@ class Scoring:
         """
         Calculate posterior for site patterns.
 
-        :param target_cov: Taget coverage patterns
+        :param target_cov: Target coverage patterns
         :return: Posteriors of coverage patterns shape: (4, 5, n)
         """
         # prevent overflow when indexing into phi_stored
@@ -532,23 +531,22 @@ class Scoring:
         len_s = len(scores)
         # Shannon's entropy of the current posterior distribution.
         logs = np.log(pos_posterior, where=pos_posterior > 0.0)
-        logs[logs == np.nan] = 0
+        logs[np.isnan(logs)] = 0
         entropy = np.sum(-pos_posterior * logs, axis=1)
         # Expected entropy after a new batch of reads
         new_entropy = np.zeros(len_s)
         # probability of observing a new base of each type at the considered position
-        observation_probabilities = np.zeros(len_s)
+        observation_probabilities = np.zeros((len_s,1))
         # posterior probabilities after reading a certain base i
         new_post = np.zeros((len_s, self.priors.len_g))
         for i in range(self.priors.len_b):  # new read base
             np.multiply(pos_posterior, self.priors.phi[i], out=new_post)
-            np.sum(new_post, axis=1, out=observation_probabilities)
+            np.sum(new_post, axis=1, out=observation_probabilities[:,0])
             observation_probabilities[observation_probabilities == 0] = 1e-300
-            new_post /= observation_probabilities[:, np.newaxis]
+            new_post /= observation_probabilities
             np.log(new_post, where=new_post > 0.0, out=logs)
-            logs[logs == np.nan] = 0
-            for j in range(self.priors.len_g):  # genotype
-                new_entropy -= observation_probabilities * new_post[:, j] * logs[:, j]
+            logs[np.isnan(logs)] = 0
+            new_entropy -= np.sum(observation_probabilities * new_post * logs, axis=1)
         scores[:] = entropy - new_entropy
         return scores, entropy
 
@@ -591,7 +589,7 @@ class Scoring:
         # to make binary exponents work, normalise benefit values
         normaliser = np.max(benefit_flat_nz)
         benefit_flat_norm = benefit_flat_nz / normaliser
-        mantissa, benefit_exponents = np.frexp(benefit_flat_norm)
+        _mantissa, benefit_exponents = np.frexp(benefit_flat_norm)
         # count how often each exponent is present
         # absolute value because counting positive integers is quicker
         benefit_exponents_pos = np.abs(benefit_exponents)
@@ -684,7 +682,7 @@ class CoverageConverter:
             paf_dict: paf_dict_type,
             seqs: dict[str, str],
             quals: dict[str, str],
-            barcodes: dict[str,int]={'':0}) -> defaultdict[Any, list]:
+            barcodes: dict[str, int] | None=None) -> defaultdict[Any, list]:
         """
         Convert mappings to coverage counts
 
@@ -696,6 +694,8 @@ class CoverageConverter:
         """
         # TODO: Change this function to consider barcodes and return something of the correct dimensions
         # container to collect increments per contig
+        if barcodes is None:
+            barcodes = {'': 0}
         increments = defaultdict(list)
         # loop through all reads
         read_ids = list(paf_dict.keys())
