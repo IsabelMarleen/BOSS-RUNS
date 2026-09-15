@@ -21,6 +21,7 @@ def test_contig(name, seq, ploidy,barcodes):
     logging.info(c.name)
     logging.info(c.seq)
     logging.info(c.seq_int)
+    logging.info(c.barcodes)
     if not barcodes:
         len_bc = 1
     else:
