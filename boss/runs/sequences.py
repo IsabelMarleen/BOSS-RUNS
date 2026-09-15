@@ -445,10 +445,11 @@ class Scoring:
                 scores[missing] = miss_scores[bases, np.arange(nmiss)]
                 entropy[missing] = miss_entropies[bases, np.arange(nmiss)]
                 ind = np.swapaxes(missing_patterns, 0, 1)
+                miss_scores = np.swapaxes(miss_scores, 0, 1)
+                miss_entropies= np.swapaxes(miss_entropies, 0, 1)
                 # assign the calculated scores and entropies to the large array
-                for i in range(ind.shape[1]):
-                    self.score_arr[ind[0, i], ind[1, i], ind[2, i], ind[3, i], ind[4, i]] = miss_scores[:, i]
-                    self.entropy_arr[ind[0, i], ind[1, i], ind[2, i], ind[3, i], ind[4, i]] = miss_entropies[:, i]
+                self.score_arr[ind[0], ind[1], ind[2], ind[3], ind[4]] = miss_scores
+                self.entropy_arr[ind[0], ind[1], ind[2], ind[3], ind[4]] = miss_entropies
             # grab the entropy values of the changed sites
             entropy[cc_pos] = self.entropy_arr[cc[:, 0], cc[:, 1], cc[:, 2], cc[:, 3], cc[:, 4], ref_bases]
             
