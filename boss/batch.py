@@ -141,8 +141,8 @@ class ReadCache:
         self.time_boss = 0
         self.time_control = 0
         # for writing reads to file
-        self.cache_control = dict()
-        self.cache_boss = dict()
+        self.cache_control = {}
+        self.cache_boss = {}
         # after how much time should sequences be written to file
         # dump time is incremented every time a batch is written, which happens once that is overcome
         self.dumptime = dumptime
@@ -222,7 +222,7 @@ class ReadCache:
 
         def add_to_cache_bc(seqs, cache, barcodes):
             for rid, seq in seqs.items():
-                cache[rid+".barcode=barcode"+str(barcodes[rid]).zfill(2)] = seq
+                cache[rid+".barcode=barcode"+str(barcodes[rid.removesuffix('.rej')]).zfill(2)] = seq
         # add the current sequences to the cache
         if reads_barcodes is None:
             add_to_cache(seqs=read_sequences, cache=self.cache_control)
