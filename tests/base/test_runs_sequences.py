@@ -169,7 +169,7 @@ def test_calc_scores(scoring, posteriors):
     n = 3
     score0 = 0.04969294
     init_scores = np.repeat(score0, repeats=n, axis=0)
-    scores, entropy = brs.calc_score(init_scores, posteriors[0,:,:], scoring.priors.len_g, scoring.priors.len_b, scoring.priors.phi)
+    scores, entropy = scoring.calc_score(init_scores, posteriors[0,:,:])
 
     exp_scores = np.array([0.41063798, 0.40142846, 0.40142834])
     exp_entropy = np.array([0.50490841, 0.48739441, 0.48739369])
