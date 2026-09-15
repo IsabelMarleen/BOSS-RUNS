@@ -95,7 +95,8 @@ class BossRunsSim(BossRuns):
                 # REJECT READ
                 paf_dict[str(rec.qname)].append(rec)
                 n_rejected += 1
-                reads_decision[rid] = reads_decision[rid][:self.mu]
+                reads_decision[rid+".rej"] = reads_decision[rid][:self.mu]
+                del reads_decision[rid]
         
         # all unmapped reads also need to be accepted or rejected, i.e. added back into the dict
         for read_id, seq in seqs.items():
@@ -109,7 +110,8 @@ class BossRunsSim(BossRuns):
                     paf_dict[read_id].append(rec_full)
                 n_accepted += 1
             else:
-                reads_decision[read_id] = seq[:self.mu]
+                reads_decision[read_id+".rej"] = seq[:self.mu]
+                del reads_decision[rid]
                 n_rejected += 1
 
 
