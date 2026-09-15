@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -16,6 +18,7 @@ def test_priors(ploidy, b, g):
     assert p.len_g == g
     assert p.phi_stored.shape == (b + 1, g, 1000)
     assert p.priors.shape == (b, g)
+    assert p.prior_dist.shape == (1,g)
 
 
 @pytest.mark.xfail(raises=ValueError)
@@ -166,7 +169,7 @@ def test_calc_scores(scoring, posteriors):
     n = 3
     score0 = 0.04969294
     init_scores = np.repeat(score0, repeats=n, axis=0)
-    scores, entropy = scoring.calc_score(init_scores, posteriors[0,:,:])
+    scores, entropy = brs.calc_score(init_scores, posteriors[0,:,:], scoring.priors.len_g, scoring.priors.len_b, scoring.priors.phi)
 
     exp_scores = np.array([0.41063798, 0.40142846, 0.40142834])
     exp_entropy = np.array([0.50490841, 0.48739441, 0.48739369])
@@ -178,4 +181,267 @@ def test_calc_scores(scoring, posteriors):
 
 
 
+def test_update_scores_updates_changed_maxed_and_missing_positions(
+    monkeypatch,
+):
+    scorer = object.__new__(brs.Scoring)
 
+    # score_arr and entropy_arr are indexed as:
+    # [coverage_0, coverage_1, coverage_2, coverage_3, coverage_4, base]
+    scorer.score_arr = np.zeros((5, 5, 5, 5, 5, 4), dtype=float)
+    scorer.entropy_arr = np.zeros((5, 5, 5, 5, 5, 4), dtype=float)
+
+    # Three positions, one barcode.
+    #
+    # Position 0:
+    #   changed and has a precomputed score
+    #
+    # Position 1:
+    #   coverage sums to 30, so it is maxed and should not be recalculated
+    #
+    # Position 2:
+    #   unchanged, but has a zero score, so it should be calculated as missing
+    coverage = np.zeros((4, 5, 1), dtype=int)
+    coverage[0, :, 0] = [1, 2, 0, 0, 9]   # deletion count will be cleared
+    coverage[1, :, 0] = [10, 10, 10, 0, 0]  # sum == 30
+    coverage[2, :, 0] = [0, 1, 1, 0, 0]  # missing pattern
+    coverage[3, :, 0] = [1, 0, 1, 0, 0]  # missing pattern 2
+
+    seq_int = np.array([1, 2, 3, 2], dtype=int)
+
+    scores = np.zeros((4, 1), dtype=float)
+    entropy = np.zeros((4, 1), dtype=float)
+
+    change_mask = np.array(
+        [
+            [True],   # position 0 should be scored from score_arr
+            [True],   # position 1 should be disabled because it is maxed
+            [False],  # position 2 is not changed, but is missing
+            [True]
+        ],
+        dtype=bool,
+    )
+
+    contig = SimpleNamespace(
+        scores=scores,
+        entropy=entropy,
+        coverage=coverage,
+        change_mask=change_mask,
+        seq_int=seq_int,
+        len_b=4,
+    )
+
+    # Precomputed values for position 0 after deletion coverage is cleared:
+    # coverage pattern = [1, 2, 0, 0, 0], reference base = 1
+    scorer.score_arr[1, 2, 0, 0, 0, 1] = 7.5
+    scorer.entropy_arr[1, 2, 0, 0, 0, 1] = 0.75
+
+    calc_calls = []
+
+    def fake_calc_posterior_and_scores(cov_patterns):
+        calc_calls.append(cov_patterns.copy())
+
+        # Return arrays shaped as [base, missing_position].
+        # Position 2 has reference base 3, so its selected values are:
+        # score = 40.0 and entropy = 0.40.
+        
+        miss_scores = np.array([
+                [10.0, 50.0],
+                [20.0, 60.0],
+                [30.0, 70.0],
+                [40.0, 80.0],
+            ])
+        miss_entropies = np.array([
+                [0.10, 0.50],
+                [0.20, 0.60],
+                [0.30, 0.70],
+                [0.40, 0.80],
+            ])
+
+        return miss_entropies, miss_scores
+
+    monkeypatch.setattr(
+        scorer,
+        "calc_posterior_and_scores",
+        fake_calc_posterior_and_scores,
+    )
+
+    returned_scores, returned_entropy = scorer.update_scores(contig)
+
+    # The method returns the contig arrays.
+    assert returned_scores is contig.scores
+    assert returned_entropy is contig.entropy
+
+    # Position 0 used the precomputed score and entropy.
+    assert contig.scores[0, 0] == pytest.approx(7.5)
+    assert contig.entropy[0, 0] == pytest.approx(0.75)
+
+    # Position 1 was maxed out.
+    assert contig.scores[1, 0] == pytest.approx(np.finfo(float).tiny)
+    assert not contig.change_mask[1, 0]
+
+    # Position 2 was calculated as a missing score.
+    assert contig.scores[2, 0] == pytest.approx(40.0)
+    assert contig.entropy[2, 0] == pytest.approx(0.40)
+
+    # Position 3 was calculated as a missing score.
+    assert contig.scores[3, 0] == pytest.approx(70.0)
+    assert contig.entropy[3, 0] == pytest.approx(0.70)
+
+    # Deletion coverage was cleared because len_b == 4.
+    assert np.all(contig.coverage[:, 4, 0] == 0)
+
+    # calc_posterior_and_scores was called once, only for position 2.
+    assert len(calc_calls) == 1
+    np.testing.assert_array_equal(
+        calc_calls[0],
+        np.array([[0, 1, 1, 0, 0], [1, 0, 1, 0, 0]]),
+    )
+
+    # The newly calculated values were cached in the large arrays.
+    np.testing.assert_array_equal(
+        scorer.score_arr[0, 1, 1, 0, 0],
+        np.array([10.0, 20.0, 30.0, 40.0]),
+    )
+    np.testing.assert_array_equal(
+        scorer.entropy_arr[0, 1, 1, 0, 0],
+        np.array([0.10, 0.20, 0.30, 0.40]),
+    )
+    np.testing.assert_array_equal(
+        scorer.score_arr[1, 0, 1, 0, 0],
+        np.array([50.0, 60.0, 70.0, 80.0]),
+    )
+    np.testing.assert_array_equal(
+        scorer.entropy_arr[1, 0, 1, 0, 0],
+        np.array([0.5, 0.6, 0.7, 0.8]),
+    )
+
+def test_update_scores_with_two_barcodes(monkeypatch):
+    scorer = object.__new__(brs.Scoring)
+
+    scorer.score_arr = np.zeros((5, 5, 5, 5, 5, 4), dtype=float)
+    scorer.entropy_arr = np.zeros((5, 5, 5, 5, 5, 4), dtype=float)
+
+    # Shape:
+    #   positions x coverage dimensions x barcodes
+    coverage = np.zeros((2, 5, 2), dtype=int)
+
+    # Position 0:
+    #   Barcode 0: precomputed pattern [1, 0, 0, 0, 0]
+    #   Barcode 1: precomputed pattern [0, 1, 0, 0, 0]
+    coverage[0, :, 0] = [1, 0, 0, 0, 0]
+    coverage[0, :, 1] = [0, 1, 0, 0, 0]
+
+    # Position 1:
+    #   Barcode 0: missing pattern [0, 1, 1, 0, 0]
+    #   Barcode 1: missing pattern [1, 1, 0, 0, 0]
+    coverage[1, :, 0] = [0, 1, 1, 0, 0]
+    coverage[1, :, 1] = [1, 1, 0, 0, 0]
+
+    scores = np.zeros((2, 2), dtype=float)
+    entropy = np.zeros((2, 2), dtype=float)
+
+    change_mask = np.array(
+        [
+            [True, True],
+            [True, False],
+        ],
+        dtype=bool,
+    )
+
+    seq_int = np.array([1, 3], dtype=int)
+
+    contig = SimpleNamespace(
+        scores=scores,
+        entropy=entropy,
+        coverage=coverage,
+        change_mask=change_mask,
+        seq_int=seq_int,
+        len_b=5,
+    )
+
+    # Precomputed values for position 0, barcode 0.
+    scorer.score_arr[1, 0, 0, 0, 0, 1] = 11.0
+    scorer.entropy_arr[1, 0, 0, 0, 0, 1] = 0.11
+
+    # Precomputed values for position 0, barcode 1.
+    scorer.score_arr[0, 1, 0, 0, 0, 1] = 22.0
+    scorer.entropy_arr[0, 1, 0, 0, 0, 1] = 0.22
+
+    calc_calls = []
+
+    def fake_calc_posterior_and_scores(cov_patterns):
+        calc_calls.append(cov_patterns.copy())
+
+        pattern = tuple(cov_patterns[0])
+
+        if pattern == (0, 1, 1, 0, 0):
+            # Barcode 0, position 1.
+            miss_scores = np.array([[10.0], [20.0], [30.0], [40.0]])
+            miss_entropies = np.array([[0.10], [0.20], [0.30], [0.40]])
+        elif pattern == (1, 1, 0, 0, 0):
+            # Barcode 1, position 1.
+            miss_scores = np.array([[50.0], [60.0], [70.0], [80.0]])
+            miss_entropies = np.array([[0.50], [0.60], [0.70], [0.80]])
+        else:
+            raise AssertionError(f"Unexpected coverage pattern: {pattern}")
+
+        return miss_entropies, miss_scores
+
+    monkeypatch.setattr(
+        scorer,
+        "calc_posterior_and_scores",
+        fake_calc_posterior_and_scores,
+    )
+
+    returned_scores, returned_entropy = scorer.update_scores(contig)
+
+    # The returned arrays are the same arrays stored on the contig.
+    assert returned_scores is contig.scores
+    assert returned_entropy is contig.entropy
+
+    # Position 0 used separate precomputed values for each barcode.
+    assert contig.scores[0, 0] == pytest.approx(11.0)
+    assert contig.entropy[0, 0] == pytest.approx(0.11)
+
+    assert contig.scores[0, 1] == pytest.approx(22.0)
+    assert contig.entropy[0, 1] == pytest.approx(0.22)
+
+    # Position 1 was calculated separately for each barcode.
+    assert contig.scores[1, 0] == pytest.approx(40.0)
+    assert contig.entropy[1, 0] == pytest.approx(0.40)
+
+    assert contig.scores[1, 1] == pytest.approx(80.0)
+    assert contig.entropy[1, 1] == pytest.approx(0.80)
+
+    # calc_posterior_and_scores was called once for each barcode's
+    # missing pattern.
+    assert len(calc_calls) == 2
+
+    np.testing.assert_array_equal(
+        calc_calls[0],
+        np.array([[0, 1, 1, 0, 0]]),
+    )
+    np.testing.assert_array_equal(
+        calc_calls[1],
+        np.array([[1, 1, 0, 0, 0]]),
+    )
+
+    # Verify that both missing patterns were cached in the shared arrays.
+    np.testing.assert_array_equal(
+        scorer.score_arr[0, 1, 1, 0, 0],
+        np.array([10.0, 20.0, 30.0, 40.0]),
+    )
+    np.testing.assert_array_equal(
+        scorer.entropy_arr[0, 1, 1, 0, 0],
+        np.array([0.10, 0.20, 0.30, 0.40]),
+    )
+
+    np.testing.assert_array_equal(
+        scorer.score_arr[1, 1, 0, 0, 0],
+        np.array([50.0, 60.0, 70.0, 80.0]),
+    )
+    np.testing.assert_array_equal(
+        scorer.entropy_arr[1, 1, 0, 0, 0],
+        np.array([0.50, 0.60, 0.70, 0.80]),
+    )
