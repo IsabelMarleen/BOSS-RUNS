@@ -234,8 +234,12 @@ class Contig:
                 w = 1
             else:
                 w = mu // self.window_size
-            smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=w, min_count=1)[::-1]
-            smu_rev = bn.move_sum(self.scores_ds[:,b], window=w, min_count=1)
+            try:
+                smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=w, min_count=1)[::-1]
+                smu_rev = bn.move_sum(self.scores_ds[:,b], window=w, min_count=1)
+            except ValueError:
+                smu_fwd = bn.move_sum(self.scores_ds[::-1,b], window=self.scores_ds.shape[0]-1, min_count=1)[::-1]
+                smu_rev = bn.move_sum(self.scores_ds[:,b], window=self.scores_ds.shape[0]-1, min_count=1)
 
             self.smu[:, 0, b] = smu_fwd
             self.smu[:, 1, b] = smu_rev
@@ -259,8 +263,12 @@ class Contig:
             # temporary container
             tmp_benefit = np.zeros(shape=(self.scores_ds.shape[0], 2))
             for i in range(10):
-                b_part_fwd = bn.move_sum(self.scores_ds[::-1, b], window=int(approx_ccl_ds[i]), min_count=1)[::-1]
-                b_part_rev = bn.move_sum(self.scores_ds[:, b], window=int(approx_ccl_ds[i]), min_count=1)
+                try:
+                    b_part_fwd = bn.move_sum(self.scores_ds[::-1, b], window=int(approx_ccl_ds[i]), min_count=1)[::-1]
+                    b_part_rev = bn.move_sum(self.scores_ds[:, b], window=int(approx_ccl_ds[i]), min_count=1)
+                except ValueError:
+                    b_part_fwd = bn.move_sum(self.scores_ds[::-1, b], window=self.scores_ds.shape[0]-1, min_count=1)[::-1]
+                    b_part_rev = bn.move_sum(self.scores_ds[:, b], window=self.scores_ds.shape[0]-1, min_count=1)
                 # apply weighting by length
                 wgt = mult[i]
                 tmp_benefit[:, 0] += (b_part_fwd * wgt)
