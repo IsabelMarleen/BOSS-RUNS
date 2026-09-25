@@ -111,7 +111,7 @@ class BossRunsSim(BossRuns):
                 n_accepted += 1
             else:
                 reads_decision[read_id+".rej"] = seq[:self.mu]
-                del reads_decision[rid]
+                del reads_decision[read_id]
                 n_rejected += 1
 
 
