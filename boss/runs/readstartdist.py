@@ -26,7 +26,7 @@ class ReadStartDist:
         self.read_starts = {cname : np.zeros(shape=(int(c.length / window_size), 2)) for cname, c in contigs.items()}  # NOTE: No additional dimension for barcodes in this initial implementation
         # fhat exists only in its merged form, i.e. for use in updating on a merged array
         self.total_len = np.sum([a.shape[0] for a in self.read_starts.values()])
-        self.target_size = int(np.sum([c.length for c in contigs.values()]) // 100)
+        self.target_size = int(np.sum([c.n_windows for c in contigs.values()]))
         self.on_target = 1   # TODO
         self.fhat = self.update_f_pointmass()
 
