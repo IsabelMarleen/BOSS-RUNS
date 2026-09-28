@@ -61,7 +61,7 @@ class ReadStartDist:
                 rec = rec[0]
 
             if rec.rev:
-                starts_rev[rec.tname].append(rec.tend)
+                starts_rev[rec.tname].append(rec.tend - 1)
             else:
                 starts_fwd[rec.tname].append(rec.tstart)
 
