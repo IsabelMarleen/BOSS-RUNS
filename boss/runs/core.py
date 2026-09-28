@@ -171,12 +171,12 @@ class BossRuns(Boss):
             fhat_exp = np.repeat(fhat_exp[:, :, np.newaxis], self.nbarcodes, axis=2)
             self._update_benefits()
             # merge the benefits into one array for combined calculation
-            benefit, _smu = self.scoring.merge_benefit(self.contigs_filt)
+            benefit, smu = self.scoring.merge_benefit(self.contigs_filt)
             target_size = self.ref.n_sites // self.args.optional.window_size
             benefit_adj = adjust_length(original_size=target_size,
                                         expanded=benefit)
             smu_adj = adjust_length(original_size=target_size,
-                                        expanded=benefit)
+                                        expanded=smu)
             fhat_adj = adjust_length(original_size=target_size,
                                      expanded=fhat_exp)
             assert fhat_adj.shape == benefit_adj.shape == smu_adj.shape
