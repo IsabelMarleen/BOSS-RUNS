@@ -232,7 +232,7 @@ class BossBits:
         for al in results:
             contig = al.ctg
             strand = al.strand  # noqa
-            coord = al.r_st if al.strand == 1 else al.r_en
+            coord = al.r_st if al.strand == 1 else al.r_en - 1
             # matches.append(targets.check_coord(contig, strand, coord))
             strand_conv = self.strand_converter[al.strand]  # type: ignore
             matches.append(
