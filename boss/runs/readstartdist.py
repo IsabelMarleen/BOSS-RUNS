@@ -65,7 +65,9 @@ class ReadStartDist:
             else:
                 starts_fwd[rec.tname].append(rec.tstart)
 
-        for cname, r_starts in self.read_starts.items():
+        # only contigs with new read starts need updating
+        for cname in (starts_fwd.keys() | starts_rev.keys()) & self.read_starts.keys():
+            r_starts = self.read_starts[cname]
             # count the number of read starts in windows
             n_windows = int(r_starts.shape[0])
             bins_fwd = np.histogram(
