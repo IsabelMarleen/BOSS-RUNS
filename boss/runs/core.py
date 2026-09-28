@@ -134,7 +134,7 @@ class BossRuns(Boss):
             buckets = adjust_length(original_size=cont.strat.shape[0], expanded=buckets_exp)
             assert buckets.shape[0] == cont.strat.shape[0]
             # grab the new strategy
-            cstrat = strat[i: i + cont.length // self.args.optional.window_size, :]
+            cstrat = strat[i: i + cont.n_windows, :]
             assert cstrat.shape == cont.strat.shape
             # assign new strat
             if not self.args.general.barcodes:
@@ -148,7 +148,7 @@ class BossRuns(Boss):
             f_perc = np.count_nonzero(cont.strat[:, 0]) / cont.strat.shape[0]
             r_perc = np.count_nonzero(cont.strat[:, 1]) / cont.strat.shape[0]
             logging.info(f'{cname}: {f_perc}, {r_perc}') # NOTE: Maybe think about whether this log is confusing because it can report more sites than exist with barcodes
-            i += cont.length // self.args.optional.window_size
+            i += cont.n_windows
 
 
 
@@ -172,7 +172,7 @@ class BossRuns(Boss):
             self._update_benefits()
             # merge the benefits into one array for combined calculation
             benefit, _smu = self.scoring.merge_benefit(self.contigs_filt)
-            target_size = self.ref.n_sites // self.args.optional.window_size
+            target_size = sum(cont.n_windows for cont in self.contigs_filt.values())
             benefit_adj = adjust_length(original_size=target_size,
                                         expanded=benefit)
             smu_adj = adjust_length(original_size=target_size,
