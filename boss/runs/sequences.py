@@ -707,16 +707,18 @@ class CoverageConverter:
                 rec = Paf.choose_best_mapper(rec)[0]
             else:
                 rec = rec[0]
-
+            assert len(seqs[rec.qname]) >= rec.qlen
+            read_seq = seqs[rec.qname][:rec.qlen]
+            read_qual = quals[rec.qname][:rec.qlen]
             # handle strands
             if rec.rev:
-                seq = reverse_complement(seqs[rec.qname])
-                qual = quals[rec.qname][::-1]
+                seq = reverse_complement(read_seq)
+                qual = read_qual[::-1]
                 start = rec.qlen - rec.qend
                 end = rec.qlen - rec.qstart
             else:
-                seq = seqs[rec.qname]
-                qual = quals[rec.qname]
+                seq = read_seq
+                qual = read_qual
                 start = rec.qstart
                 end = rec.qend
 
