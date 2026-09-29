@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 import bottleneck as bn
 import mappy
 
-from boss.utils import window_sum, adjust_length
 from boss.mapper import Indexer
 from boss.runs.sequences import Scoring
 
@@ -91,7 +90,11 @@ class Contig:
         :return:
         """
         self.bucket_size = bucket_size
-        self.bucket_switches = np.zeros(shape=(int(self.length // bucket_size) + 1, self.nbarcodes), dtype="bool")
+        # the remainder of the contig is folded into the last bucket
+        n_buckets = max(1, self.length // bucket_size)
+        self.bucket_starts = np.arange(n_buckets) * bucket_size
+        self.bucket_lengths = np.append(np.diff(self.bucket_starts), self.length - self.bucket_starts[-1])
+        self.bucket_switches = np.zeros(shape=(n_buckets, self.nbarcodes), dtype="bool")
         self.switched_on = np.zeros(shape=(self.nbarcodes), dtype="bool")
 
 
@@ -196,10 +199,9 @@ class Contig:
             bucket_switches = self.bucket_switches[:,b]
 
             csum = np.sum(coverage, axis=1)
-            # coverage in buckets
-            csum_buckets = window_sum(csum, self.bucket_size)
-            cmean_buckets = np.divide(csum_buckets, self.bucket_size)
-            cmean_buckets = adjust_length(original_size=bucket_switches.shape[0], expanded=cmean_buckets)
+            # mean coverage in buckets, the last bucket also covers the remainder of the contig
+            csum_buckets = np.add.reduceat(csum, self.bucket_starts)
+            cmean_buckets = np.divide(csum_buckets, self.bucket_lengths)
             # flip strategy switches
             bucket_switches[np.where(cmean_buckets >= threshold)] = 1
             switch_count = np.bincount(bucket_switches)
