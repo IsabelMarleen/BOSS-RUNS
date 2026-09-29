@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import boss.runs.sequences as brs
+from boss.mapper import Indexer, Mapper
 
 
 # with deletions (default) there are 5 states
@@ -445,3 +446,32 @@ def test_update_scores_with_two_barcodes(monkeypatch):
         scorer.entropy_arr[1, 1, 0, 0, 0],
         np.array([0.50, 0.60, 0.70, 0.80]),
     )
+
+
+
+@pytest.mark.parametrize("rev", [False, True])
+def test_convert_records_truncated_mapping(tmp_path, rev):
+    # rejected reads in simulations are mapped by their first mu bases, but converted with the full read
+    rng = np.random.default_rng(0)
+    ref = "".join(rng.choice(list("ACGT"), size=200_000))
+    fasta, mmi = tmp_path / "ref.fa", tmp_path / "ref.mmi"
+    fasta.write_text(">ref\n" + ref + "\n")
+    Indexer(fasta=str(fasta), mmi=str(mmi))
+    mapper = Mapper(ref=str(mmi))
+    comp = str.maketrans("ACGT", "TGCA")
+    reads = {}
+    for i in range(20):
+        start = int(rng.integers(0, 190_000))
+        frag = ref[start: start + 8_000]
+        reads[f"r{i}"] = frag[::-1].translate(comp) if rev else frag
+    quals = {rid: "?" * len(seq) for rid, seq in reads.items()}
+    paf_dict = mapper.map_sequences(sequences=reads, trunc=True)
+    assert paf_dict
+    assert all(recs[0].qlen == mapper.mu and recs[0].rev == rev for recs in paf_dict.values())
+    incr = brs.CoverageConverter().convert_records(paf_dict=paf_dict, seqs=reads, quals=quals)
+    ref_int = np.array(list(ref.translate(str.maketrans("ACGT", "0123"))), dtype=np.uint8)
+    # every observed base is the reference base at the position the truncated read mapped to
+    for start, end, query_arr, _addition, _barcode in incr["ref"]:
+        assert end - start <= mapper.mu
+        observed = query_arr < 4
+        assert np.array_equal(query_arr[observed], ref_int[start: end][observed])
